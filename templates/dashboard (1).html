@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FCS Portal · Boeing 787</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1c2330;--border:#30363d;
+  --blue:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#e3b341;
+  --orange:#f0883e;--purple:#d2a8ff;--cyan:#39d0d8;
+  --text:#e6edf3;--muted:#8b949e;--radius:10px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{font-size:1.3rem}
+.logo-title{font-size:0.9rem;font-weight:700;letter-spacing:2px;color:var(--blue);text-transform:uppercase}
+.logo-sub{font-size:0.58rem;color:var(--muted)}
+.pfd-strip{display:flex;gap:5px;align-items:center}
+.pfd-item{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 9px;text-align:center;min-width:72px}
+.pfd-val{font-size:0.82rem;font-weight:700;font-family:'Courier New',monospace;font-variant-numeric:tabular-nums;will-change:contents}
+.pfd-lbl{font-size:0.48rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.badge{display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:20px;font-size:0.68rem;font-weight:700;letter-spacing:1px;border:1px solid var(--border);background:var(--surface2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.live{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot.dead{background:var(--red)}
+#cascade-banner{display:none;padding:8px 20px;background:#f0883e18;border-bottom:2px solid var(--orange);flex-shrink:0}
+#cascade-banner.show{display:flex;align-items:center;justify-content:space-between}
+.banner-left{display:flex;align-items:center;gap:12px}
+.banner-title{font-size:0.78rem;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:1px}
+.banner-stage{font-size:0.68rem;color:var(--muted)}
+.stop-btn{padding:5px 14px;border-radius:6px;border:1px solid var(--orange);background:transparent;color:var(--orange);font-size:0.65rem;font-weight:700;cursor:pointer;letter-spacing:1px}
+.stop-btn:hover{background:#f0883e20}
+main{flex:1;display:grid;grid-template-columns:250px 1fr;overflow:hidden;min-height:0}
+.left{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px 11px;gap:12px;overflow-y:auto}
+.sec-title{font-size:0.58rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:2px;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:1px}
+.guard-card{border-radius:var(--radius);padding:12px;border:2px solid var(--green);background:var(--surface2)}
+.guard-card.failed{border-color:var(--red);box-shadow:0 0 16px #f8514940}
+.guard-lbl{font-size:0.56rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.guard-val{font-size:1.3rem;font-weight:800;letter-spacing:2px;color:var(--green);margin:3px 0}
+.guard-val.failed{color:var(--red)}
+.guard-reason{font-size:0.6rem;color:var(--muted);min-height:14px}
+.fault-group{display:flex;flex-direction:column;gap:4px}
+.group-lbl{font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.btn-row{display:flex;gap:4px;flex-wrap:wrap}
+.fbtn{flex:1;min-width:56px;padding:6px 5px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:0.58rem;font-weight:600;cursor:pointer;transition:border-color 0.15s,color 0.15s,background 0.15s;text-transform:uppercase;letter-spacing:0.5px}
+.fbtn:hover{border-color:var(--blue);color:var(--blue)}
+.fbtn.on-none{border-color:var(--green);background:#3fb95018;color:var(--green)}
+.fbtn.on-fault{border-color:var(--red);background:#f8514918;color:var(--red);box-shadow:0 0 8px #f8514930}
+.fbtn.on-cascade{border-color:var(--orange);background:#f0883e18;color:var(--orange)}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.titem{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 7px}
+.titem-lbl{font-size:0.5rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.titem-val{font-size:0.82rem;font-weight:700;margin-top:1px;font-variant-numeric:tabular-nums}
+.reset-btn{width:100%;padding:9px;border-radius:var(--radius);border:1px solid var(--red);background:#f8514912;color:var(--red);font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer}
+.reset-btn:hover{background:#f8514928}
+.ai-panel{border-radius:var(--radius);padding:10px 12px;border:2px solid #58a6ff44;background:#0d1117}
+.ai-panel.risk-medium{border-color:var(--yellow);background:#e3b34108}
+.ai-panel.risk-high{border-color:var(--red);background:#f8514910;box-shadow:0 0 16px #f8514930}
+.ai-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.ai-title{font-size:0.58rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:2px}
+.ai-badge{font-size:0.52rem;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:1px;background:#3fb95022;color:var(--green);border:1px solid var(--green)}
+.ai-badge.medium{background:#e3b34122;color:var(--yellow);border-color:var(--yellow)}
+.ai-badge.high{background:#f8514922;color:var(--red);border-color:var(--red)}
+.ai-fault{font-size:0.62rem;color:var(--orange);font-weight:700;margin-bottom:3px;min-height:13px}
+.ai-text{font-size:0.62rem;color:var(--text);line-height:1.5;min-height:26px}
+.right{display:flex;flex-direction:column;overflow:hidden;min-height:0}
+/* cockpit strip — NO animation/transition on value text */
+.cockpit-strip{flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);padding:8px 14px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.ci-group{display:flex;flex-direction:column;gap:4px}
+.ci-group-title{font-size:0.5rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+.ci-row{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.ci-item{background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px}
+.ci-item.warn{border-color:var(--yellow)}
+.ci-item.alert{border-color:var(--red);box-shadow:0 0 5px #f8514930}
+.ci-lbl{font-size:0.46rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.ci-val{font-size:0.78rem;font-weight:700;font-family:'Courier New',monospace;margin-top:1px;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* num = the part that changes; unit = static label that never changes */
+.ci-num{} 
+.ci-unit{font-size:0.46rem;color:var(--muted);margin-left:1px;font-family:inherit}
+.attitude-box{background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;grid-column:span 2}
+.att-row{display:flex;justify-content:space-between;align-items:center;gap:5px}
+.att-bar-wrap{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.att-bar{height:100%;border-radius:3px;transition:width 0.3s,background 0.5s}
+.hdg-compass{background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;grid-column:span 2;display:flex;align-items:center;gap:7px}
+.hdg-rose{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);position:relative;flex-shrink:0;background:var(--surface2)}
+.hdg-needle{position:absolute;top:50%;left:50%;width:2px;height:13px;background:var(--red);transform-origin:bottom center;transform:translateX(-50%) translateY(-100%);border-radius:1px;transition:transform 0.4s}
+.hdg-val{font-size:0.95rem;font-weight:700;font-family:'Courier New',monospace;color:var(--cyan);font-variant-numeric:tabular-nums}
+.hdg-dir{font-size:0.52rem;color:var(--muted)}
+.charts{flex:1;padding:10px 14px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px;overflow:hidden;min-height:0}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.chart-hdr{display:flex;align-items:center;justify-content:space-between}
+.chart-title{font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.chart-legend{display:flex;gap:8px}
+.leg{display:flex;align-items:center;gap:4px;font-size:0.53rem;color:var(--muted)}
+.leg-dot{width:7px;height:7px;border-radius:50%}
+.chart-wrap{flex:1;position:relative;min-height:0}
+canvas{width:100%!important;height:100%!important}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+/* ── Auto demo banner ────────────────────────────────────────────────────── */
+#auto-demo-banner{display:none;padding:8px 20px;background:#d2a8ff18;border-bottom:2px solid var(--purple);flex-shrink:0}
+#auto-demo-banner.show{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.demo-left{display:flex;align-items:center;gap:12px;flex:1}
+.demo-title{font-size:0.75rem;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:1px}
+.demo-step{font-size:0.65rem;color:var(--muted)}
+.demo-fault{font-size:0.72rem;font-weight:700;color:var(--text)}
+.demo-desc{font-size:0.6rem;color:var(--muted)}
+.demo-phase-badge{font-size:0.6rem;font-weight:700;padding:2px 10px;border-radius:10px;letter-spacing:1px;white-space:nowrap}
+.demo-phase-badge.injecting{background:#f8514922;color:var(--red);border:1px solid var(--red)}
+.demo-phase-badge.resetting{background:#3fb95022;color:var(--green);border:1px solid var(--green)}
+.demo-countdown{font-size:1rem;font-weight:700;font-family:'Courier New',monospace;color:var(--purple);min-width:32px;text-align:center}
+.demo-progress-wrap{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;max-width:120px}
+.demo-progress-bar{height:100%;border-radius:2px;background:var(--purple);transition:width 1s linear}
+.demo-stop-btn{padding:5px 14px;border-radius:6px;border:1px solid var(--purple);background:transparent;color:var(--purple);font-size:0.65rem;font-weight:700;cursor:pointer;letter-spacing:1px;white-space:nowrap}
+.demo-stop-btn:hover{background:#d2a8ff20}
+
+/* Auto demo start button */
+.auto-demo-btn{width:100%;padding:10px;border-radius:var(--radius);border:1px solid var(--purple);background:#d2a8ff12;color:var(--purple);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;margin-bottom:6px}
+.auto-demo-btn:hover{background:#d2a8ff25}
+.auto-demo-btn.running{border-color:var(--red);background:#f8514912;color:var(--red)}
+
+/* ── Steady alert states — no animation, solid color like real ECAM ──────── */
+.guard-card.predicting-medium{border-color:var(--yellow);box-shadow:0 0 12px #e3b34130}
+.guard-card.predicting-high{border-color:var(--orange);box-shadow:0 0 14px #f0883e40}
+.chart-card.fault-active{border-color:var(--red);background:#f8514908}
+.chart-card.fault-predicted{border-color:var(--yellow);background:#e3b34106}
+.titem.fault-raw{border-color:var(--red);background:#f8514914}
+.titem.fault-safe{border-color:var(--green);background:#3fb95014}
+.titem.predicting{border-color:var(--yellow);background:#e3b34110}
+.pfd-item.fault{border-color:var(--red);background:#f8514914}
+.pfd-item.predicting{border-color:var(--yellow);background:#e3b34110}
+.ci-item.fault-channel{border-color:var(--red);background:#f8514910}
+.titem.write-active{border-color:var(--green);background:#3fb95014}
+
+/* Unknown anomaly special display */
+.ai-unknown{margin-top:8px;border-top:1px solid var(--border);padding-top:7px}
+.ai-unknown-title{font-size:0.6rem;font-weight:700;color:var(--orange);letter-spacing:1px;margin-bottom:4px}
+.ai-unknown-desc{font-size:0.6rem;color:var(--text);line-height:1.4;margin-bottom:4px}
+.ai-unknown-note{font-size:0.55rem;color:var(--muted);font-style:italic}
+.ai-panel.risk-unknown{border-color:var(--orange);background:#f0883e08;box-shadow:0 0 14px #f0883e30}
+.ai-badge.unknown{background:#f0883e22;color:var(--orange);border-color:var(--orange)}
+
+/* Prediction timing indicator */
+.ai-timing{margin-top:6px;font-size:0.55rem;color:var(--muted);border-top:1px solid var(--border);padding-top:5px}
+.ai-timing span{color:var(--green);font-weight:700}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">✈</span>
+    <div>
+      <div class="logo-title">FCS Portal</div>
+      <div class="logo-sub">Boeing 787 · Fault Detection & Recovery</div>
+    </div>
+  </div>
+  <div class="pfd-strip">
+    <div class="pfd-item"><div class="pfd-val" id="h-alt"  style="color:var(--blue)">—</div><div class="pfd-lbl">Alt ft</div></div>
+    <div class="pfd-item"><div class="pfd-val" id="h-spd"  style="color:var(--green)">—</div><div class="pfd-lbl">IAS kts</div></div>
+    <div class="pfd-item"><div class="pfd-val" id="h-hdg"  style="color:var(--cyan)">—</div><div class="pfd-lbl">Heading</div></div>
+    <div class="pfd-item"><div class="pfd-val" id="h-vs"   style="color:var(--yellow)">—</div><div class="pfd-lbl">V/S fpm</div></div>
+    <div class="pfd-item"><div class="pfd-val" id="h-mach" style="color:var(--purple)">—</div><div class="pfd-lbl">Mach</div></div>
+    <div class="pfd-item"><div class="pfd-val" id="h-time" style="color:var(--yellow)">—</div><div class="pfd-lbl">Sim Time</div></div>
+  </div>
+  <div class="badge"><div class="dot dead" id="ws-dot"></div><span id="ws-lbl">CONNECTING</span></div>
+</header>
+
+<div id="cascade-banner">
+  <div class="banner-left">
+    <span style="font-size:1.1rem">⚡</span>
+    <div>
+      <div class="banner-title" id="banner-title">CASCADE ACTIVE</div>
+      <div class="banner-stage" id="banner-stage">—</div>
+    </div>
+  </div>
+  <button class="stop-btn" onclick="resetAll()">⛔ STOP & RESET</button>
+</div>
+
+<div id="auto-demo-banner">
+  <div class="demo-left">
+    <div>
+      <div class="demo-title"> Auto Demo Running</div>
+      <div class="demo-step" id="demo-step"></div>
+    </div>
+    <div>
+      <div class="demo-fault" id="demo-fault">—</div>
+      <div class="demo-desc"  id="demo-desc">—</div>
+    </div>
+    <span class="demo-phase-badge injecting" id="demo-phase-badge">INJECTING</span>
+    <div class="demo-progress-wrap">
+      <div class="demo-progress-bar" id="demo-progress-bar" style="width:100%"></div>
+    </div>
+  </div>
+  <div class="demo-countdown" id="demo-countdown">—</div>
+  <button class="demo-stop-btn" onclick="stopAutoDemo()">⛔ Stop Demo</button>
+</div>
+
+<main>
+  <aside class="left">
+    <div>
+      <div class="sec-title">Safety Guard</div>
+      <div class="guard-card" id="guard-card">
+        <div class="guard-lbl">Guard Status</div>
+        <div class="guard-val" id="guard-val">HEALTHY</div>
+        <div class="guard-reason" id="guard-reason">All signals nominal</div>
+      </div>
+    </div>
+    <div>
+      <div class="sec-title">AI Fault Analyst</div>
+      <div class="ai-panel" id="ai-panel">
+        <div class="ai-hdr">
+          <span class="ai-title">Predictive Analysis</span>
+          <span class="ai-badge" id="ai-badge">LOW RISK</span>
+        </div>
+        <div class="ai-fault" id="ai-fault"></div>
+        <div class="ai-text" id="ai-text">Collecting signal data...</div>
+        <div class="ai-unknown" id="ai-unknown" style="display:none">
+          <div class="ai-unknown-title">⚠ UNKNOWN ANOMALY DETECTED</div>
+          <div class="ai-unknown-desc" id="ai-unknown-desc"></div>
+          <div class="ai-unknown-note">Pattern does not match any known fault — manual investigation required</div>
+        </div>
+        <div class="ai-timing" id="ai-timing" style="display:none"></div>
+
+      </div>
+    </div>
+    <div>
+      <div class="sec-title">Fault Injection</div>
+      <div class="fault-group">
+        <div class="group-lbl">Stick Faults</div>
+        <div class="btn-row">
+          <button class="fbtn on-none" data-type="stick" data-fault="NONE"           onclick="setFault('stick','NONE')">None</button>
+          <button class="fbtn"         data-type="stick" data-fault="LOSS_OF_SIGNAL" onclick="setFault('stick','LOSS_OF_SIGNAL')">Loss</button>
+          <button class="fbtn"         data-type="stick" data-fault="HARD_OVER"      onclick="setFault('stick','HARD_OVER')">Hard Over</button>
+          <button class="fbtn"         data-type="stick" data-fault="STUCK_AT"       onclick="setFault('stick','STUCK_AT')">Stuck</button>
+        </div>
+      </div>
+      <div class="fault-group" style="margin-top:7px">
+        <div class="group-lbl">Throttle Faults</div>
+        <div class="btn-row">
+          <button class="fbtn on-none" data-type="throttle" data-fault="NONE"         onclick="setFault('throttle','NONE')">None</button>
+          <button class="fbtn"         data-type="throttle" data-fault="BIAS_DRIFT"   onclick="setFault('throttle','BIAS_DRIFT')">Bias Drift</button>
+          <button class="fbtn"         data-type="throttle" data-fault="GAIN_FAILURE" onclick="setFault('throttle','GAIN_FAILURE')">Gain Fail</button>
+        </div>
+      </div>
+
+      <div class="fault-group" style="margin-top:7px">
+        <div class="group-lbl">Cascading Scenarios</div>
+        <div class="btn-row" style="margin-bottom:3px"><button class="fbtn" id="btn-tr" onclick="startCascade('throttle_runaway')">Throttle → Stick</button></div>
+        <div class="btn-row" style="margin-bottom:3px"><button class="fbtn" id="btn-cf" onclick="startCascade('control_failure')">Stick → Throttle</button></div>
+        <div class="btn-row"><button class="fbtn" id="btn-sd" onclick="startCascade('sensor_degradation')">Sensor Fail</button></div>
+      </div>
+    </div>
+    <div>
+      <div class="sec-title">FCS Telemetry</div>
+      <div class="tgrid">
+        <div class="titem" id="titem-rs"><div class="titem-lbl">Raw Stick</div><div class="titem-val" id="t-rs" style="color:var(--red)">—</div></div>
+        <div class="titem" id="titem-ss"><div class="titem-lbl">Safe Stick</div><div class="titem-val" id="t-ss" style="color:var(--green)">—</div></div>
+        <div class="titem" id="titem-rt"><div class="titem-lbl">Raw Throttle</div><div class="titem-val" id="t-rt" style="color:var(--red)">—</div></div>
+        <div class="titem" id="titem-st"><div class="titem-lbl">Safe Throttle</div><div class="titem-val" id="t-st" style="color:var(--green)">—</div></div>
+        <div class="titem"><div class="titem-lbl">Pitch Rate</div><div class="titem-val" id="t-pq" style="color:var(--purple)">—</div></div>
+        <div class="titem"><div class="titem-lbl">FG Link</div><div class="titem-val" id="t-fg" style="color:var(--muted)">—</div></div>
+        <div class="titem" id="titem-fgwrite"><div class="titem-lbl">FG Write</div><div class="titem-val" id="t-fgwrite" style="color:var(--muted)">—</div></div>
+        <div class="titem"><div class="titem-lbl">Write Count</div><div class="titem-val" id="t-fgcount" style="color:var(--muted)">0</div></div>
+      </div>
+    </div>
+    <button class="auto-demo-btn" id="auto-demo-btn" onclick="toggleAutoDemo()">▶ Start Auto Demo</button>
+    <button class="reset-btn" onclick="resetAll()">⚠ Reset All Faults</button>
+  </aside>
+
+  <div class="right">
+    <!-- ══ COCKPIT INSTRUMENTS ══
+         Each .ci-val has two children:
+           <span class="ci-num" id="xxx-n"> — only this gets updated (number only)
+           <span class="ci-unit">unit text  — static, never touched by JS
+         This prevents DOM reconstruction and stops blinking.
+    -->
+    <div class="cockpit-strip">
+
+      <!-- 1. Navigation -->
+      <div class="ci-group">
+        <div class="ci-group-title">Navigation</div>
+        <div class="ci-row">
+          <div class="ci-item">
+            <div class="ci-lbl">Altitude</div>
+            <div class="ci-val" style="color:var(--blue)"><span class="ci-num" id="n-alt">—</span><span class="ci-unit"> ft</span></div>
+          </div>
+          <div class="ci-item">
+            <div class="ci-lbl">IAS</div>
+            <div class="ci-val" style="color:var(--green)"><span class="ci-num" id="n-ias">—</span><span class="ci-unit"> kts</span></div>
+          </div>
+          <div class="ci-item">
+            <div class="ci-lbl">Ground Spd</div>
+            <div class="ci-val" style="color:var(--cyan)"><span class="ci-num" id="n-gs">—</span><span class="ci-unit"> kts</span></div>
+          </div>
+          <div class="ci-item">
+            <div class="ci-lbl">Mach</div>
+            <div class="ci-val" style="color:var(--purple)"><span class="ci-num" id="n-mach">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Vertical -->
+      <div class="ci-group">
+        <div class="ci-group-title">Vertical</div>
+        <div class="ci-row">
+          <div class="ci-item" id="ci-vs" style="grid-column:span 2">
+            <div class="ci-lbl">Vertical Speed</div>
+            <div class="ci-val"><span class="ci-num" id="n-vs" style="color:var(--green)">—</span><span class="ci-unit"> fpm</span></div>
+          </div>
+          <div class="ci-item" id="ci-pitch-deg">
+            <div class="ci-lbl">Pitch</div>
+            <div class="ci-val" style="color:var(--orange)"><span class="ci-num" id="n-pitch">—</span><span class="ci-unit">°</span></div>
+          </div>
+          <div class="ci-item" id="ci-roll-deg">
+            <div class="ci-lbl">Bank</div>
+            <div class="ci-val" style="color:var(--orange)"><span class="ci-num" id="n-roll">—</span><span class="ci-unit">°</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Heading -->
+      <div class="ci-group">
+        <div class="ci-group-title">Heading</div>
+        <div class="ci-row">
+          <div class="hdg-compass">
+            <div class="hdg-rose"><div class="hdg-needle" id="hdg-needle"></div></div>
+            <div>
+              <div class="hdg-val"><span id="n-hdg">—</span>°</div>
+              <div class="hdg-dir" id="n-hdg-dir">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="attitude-box">
+          <div class="att-row" style="margin-bottom:3px">
+            <span style="font-size:0.46rem;color:var(--muted);width:26px">PTCH</span>
+            <div class="att-bar-wrap"><div class="att-bar" id="att-pitch-bar" style="width:50%;background:var(--orange)"></div></div>
+            <span style="font-size:0.46rem;color:var(--muted);width:26px;text-align:right" id="att-pitch-num">0°</span>
+          </div>
+          <div class="att-row">
+            <span style="font-size:0.46rem;color:var(--muted);width:26px">BANK</span>
+            <div class="att-bar-wrap"><div class="att-bar" id="att-roll-bar" style="width:50%;background:var(--cyan)"></div></div>
+            <span style="font-size:0.46rem;color:var(--muted);width:26px;text-align:right" id="att-roll-num">0°</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Engine -->
+      <div class="ci-group">
+        <div class="ci-group-title">Engine (ENG 1)</div>
+        <div class="ci-row">
+          <div class="ci-item" id="ci-n1">
+            <div class="ci-lbl">N1</div>
+            <div class="ci-val"><span class="ci-num" id="n-n1" style="color:var(--green)">—</span><span class="ci-unit"> %</span></div>
+          </div>
+          <div class="ci-item" id="ci-n2">
+            <div class="ci-lbl">N2</div>
+            <div class="ci-val"><span class="ci-num" id="n-n2" style="color:var(--green)">—</span><span class="ci-unit"> %</span></div>
+          </div>
+          <div class="ci-item" style="grid-column:span 2">
+            <div class="ci-lbl">EPR (Engine Pressure Ratio)</div>
+            <div class="ci-val" style="color:var(--yellow)"><span class="ci-num" id="n-epr">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Accelerations -->
+      <div class="ci-group">
+        <div class="ci-group-title">Accelerations</div>
+        <div class="ci-row">
+          <div class="ci-item">
+            <div class="ci-lbl">Long. Accel</div>
+            <div class="ci-val" style="color:var(--yellow)"><span class="ci-num" id="n-ax">—</span><span class="ci-unit"> fps²</span></div>
+          </div>
+          <div class="ci-item">
+            <div class="ci-lbl">Vert. Accel</div>
+            <div class="ci-val" style="color:var(--yellow)"><span class="ci-num" id="n-az">—</span><span class="ci-unit"> fps²</span></div>
+          </div>
+          <div class="ci-item" style="grid-column:span 2">
+            <div class="ci-lbl">Pitch Rate</div>
+            <div class="ci-val" style="color:var(--purple)"><span class="ci-num" id="n-prate">—</span><span class="ci-unit"> °/s</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- ══ END COCKPIT STRIP ══ -->
+
+    <div class="charts">
+      <div class="chart-card" id="chart-stick">
+        <div class="chart-hdr">
+          <span class="chart-title">Elevator / Sidestick</span>
+          <div class="chart-legend">
+            <div class="leg"><div class="leg-dot" style="background:var(--red)"></div>Raw (faulty)</div>
+            <div class="leg"><div class="leg-dot" style="background:var(--green)"></div>Safe (guard)</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="cStick"></canvas></div>
+      </div>
+      <div class="chart-card" id="chart-throttle">
+        <div class="chart-hdr">
+          <span class="chart-title">Throttle</span>
+          <div class="chart-legend">
+            <div class="leg"><div class="leg-dot" style="background:var(--red)"></div>Raw (faulty)</div>
+            <div class="leg"><div class="leg-dot" style="background:var(--green)"></div>Safe (guard)</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="cThrottle"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <span class="chart-title">Pitch Rate (°/s)</span>
+          <div class="chart-legend"><div class="leg"><div class="leg-dot" style="background:var(--purple)"></div>q</div></div>
+        </div>
+        <div class="chart-wrap"><canvas id="cPitch"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-hdr">
+          <span class="chart-title">Longitudinal Accel (fps²)</span>
+          <div class="chart-legend"><div class="leg"><div class="leg-dot" style="background:var(--yellow)"></div>ax</div></div>
+        </div>
+        <div class="chart-wrap"><canvas id="cAccel"></canvas></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const MAX_PTS = 150;
+const socket  = io();
+
+socket.on("connect",    () => { dot("live"); lbl("LIVE"); });
+socket.on("disconnect", () => { dot("dead"); lbl("DISCONNECTED"); });
+function dot(c) { document.getElementById("ws-dot").className = "dot " + c; }
+function lbl(t) { document.getElementById("ws-lbl").textContent = t; }
+
+// ── Cache every DOM element that gets updated ─────────────────────────────
+// Accessing getElementById 30 times per frame at 20Hz = 600 lookups/sec.
+// Caching once at startup eliminates all of that overhead.
+const E = {};
+// Pre-register new alert-target IDs
+["chart-stick","chart-throttle",
+ "titem-rs","titem-ss","titem-rt","titem-st","titem-fgwrite",
+ "pfd-alt","pfd-spd"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) E[id] = el;
+});
+[
+  "h-alt","h-spd","h-hdg","h-vs","h-mach","h-time",
+  "n-alt","n-ias","n-gs","n-mach",
+  "ci-vs","n-vs",
+  "ci-pitch-deg","n-pitch","ci-roll-deg","n-roll",
+  "n-hdg","n-hdg-dir","hdg-needle",
+  "att-pitch-bar","att-pitch-num","att-roll-bar","att-roll-num",
+  "ci-n1","n-n1","ci-n2","n-n2","n-epr",
+  "n-ax","n-az","n-prate",
+  "t-rs","t-ss","t-rt","t-st","t-pq","t-fg","t-fgwrite","t-fgcount",
+  "guard-card","guard-val","guard-reason",
+  "ai-panel","ai-badge","ai-fault","ai-text",
+  "cascade-banner","banner-title","banner-stage",
+  "btn-tr","btn-cf","btn-sd",
+].forEach(id => { E[id] = document.getElementById(id); });
+
+// ── setNum: only writes to DOM when value string actually changed ──────────
+// This is the core fix for blinking — no unnecessary DOM writes.
+const _prev = {};
+function setNum(id, val) {
+  if (_prev[id] === val) return;
+  _prev[id] = val;
+  if (E[id]) E[id].textContent = val;
+}
+function setTxt(id, val) {
+  if (_prev[id] === val) return;
+  _prev[id] = val;
+  if (E[id]) E[id].textContent = val;
+}
+function setStyle(id, prop, val) {
+  if (E[id] && E[id].style[prop] !== val) E[id].style[prop] = val;
+}
+function setClass(id, cls) {
+  if (E[id] && E[id].className !== cls) E[id].className = cls;
+}
+
+function hdgDir(d) {
+  return ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(d/22.5)%16];
+}
+function attW(v, r) { return Math.min(100, Math.max(0, ((v + r) / (2 * r)) * 100)); }
+function attC(v, w, a) {
+  const x = Math.abs(v);
+  return x >= a ? "var(--red)" : x >= w ? "var(--yellow)" : "var(--green)";
+}
+function ciWarn(id, v, w, a) {
+  const cls = "ci-item" + (Math.abs(v) >= a ? " alert" : Math.abs(v) >= w ? " warn" : "");
+  setClass(id, cls);
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────
+function mkDs(c) {
+  return { data:[], borderColor:c, backgroundColor:"transparent", borderWidth:2, pointRadius:0, tension:0.2 };
+}
+function mkChart(id, ds, yMin, yMax) {
+  return new Chart(document.getElementById(id).getContext("2d"), {
+    type:"line", data:{ labels:[], datasets:ds },
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ticks:{ color:"#6e7681", font:{size:9}, maxTicksLimit:5 }, grid:{ color:"#21262d" } },
+        y:{ min:yMin, max:yMax, ticks:{ color:"#6e7681", font:{size:9} }, grid:{ color:"#21262d" } }
+      }
+    }
+  });
+}
+const cStick    = mkChart("cStick",    [mkDs("#f85149"), mkDs("#3fb950")], -1.1, 1.1);
+const cThrottle = mkChart("cThrottle", [mkDs("#f85149"), mkDs("#3fb950")], -0.05, 1.1);
+const cPitch    = mkChart("cPitch",    [mkDs("#d2a8ff")], -30, 30);
+const cAccel    = mkChart("cAccel",    [mkDs("#e3b341")], -50, 50);
+
+function pushChart(ch, lb, ...vs) {
+  ch.data.labels.push(lb);
+  vs.forEach((v, i) => ch.data.datasets[i].data.push(v));
+  if (ch.data.labels.length > MAX_PTS) {
+    ch.data.labels.shift();
+    ch.data.datasets.forEach(ds => ds.data.shift());
+  }
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────
+let pending = null;
+socket.on("telemetry", d => { pending = d; });
+
+function drawLoop() {
+  if (pending) {
+    const d = pending; pending = null;
+    const tl = d.t.toFixed(1) + "s";
+
+    // Charts (these must update every frame — that's their job)
+    pushChart(cStick,    tl, d.raw_stick,    d.safe_stick);
+    pushChart(cThrottle, tl, d.raw_throttle, d.safe_throttle);
+    pushChart(cPitch,    tl, d.pitch_q);
+    pushChart(cAccel,    tl, d.accel_ax);
+    cStick.update("none"); cThrottle.update("none");
+    cPitch.update("none"); cAccel.update("none");
+
+    // ── Header PFD strip ──────────────────────────────────────────────────
+    // Header values rounded to reduce DOM update frequency → stops flicker
+    setTxt("h-alt",  d.altitude_ft   != null ? (Math.round(d.altitude_ft  / 10) * 10).toString() : "—");
+    setTxt("h-spd",  d.airspeed_kts  != null ? Math.round(d.airspeed_kts).toString()              : "—");
+    setTxt("h-hdg",  d.heading_deg   != null ? Math.round(d.heading_deg).toString() + "°"         : "—");
+    const vsRnd = d.vs_fpm != null ? Math.round(d.vs_fpm / 10) * 10 : null;
+    setTxt("h-vs",   vsRnd != null ? (vsRnd >= 0 ? "+" : "") + vsRnd.toString() : "—");
+    setTxt("h-mach", (d.mach != null && d.mach > 0.01) ? "M" + d.mach.toFixed(2) : "—");
+    setTxt("h-time", Math.floor(d.t).toString() + "s");
+
+    // ── Cockpit instruments — setNum only writes when value changes ────────
+
+    // Navigation (update only the ci-num span — unit span is untouched)
+    setNum("n-alt",  d.altitude_ft      != null ? (Math.round(d.altitude_ft/10)*10).toString() : "—");
+    setNum("n-ias",  d.airspeed_kts     != null ? Math.round(d.airspeed_kts).toString() : "—");
+    setNum("n-gs",   d.groundspeed_kts  != null ? Math.round(d.groundspeed_kts).toString() : "—");
+    setNum("n-mach", (d.mach != null && d.mach > 0.01) ? "M" + d.mach.toFixed(2) : "—");
+
+    // Vertical speed
+    const vs = d.vs_fpm != null ? d.vs_fpm : 0;
+    setNum("n-vs", (vs >= 0 ? "+" : "") + vs.toFixed(0));
+    setStyle("n-vs", "color", Math.abs(vs) >= 2500 ? "var(--red)" : Math.abs(vs) >= 1500 ? "var(--yellow)" : "var(--green)");
+    ciWarn("ci-vs", vs, 1500, 2500);
+
+    // Pitch & bank
+    const pitch = d.pitch_deg != null ? d.pitch_deg : 0;
+    const roll  = d.roll_deg  != null ? d.roll_deg  : 0;
+    setNum("n-pitch", pitch.toFixed(0));
+    setNum("n-roll",  roll.toFixed(0));
+    ciWarn("ci-pitch-deg", pitch, 15, 25);
+    ciWarn("ci-roll-deg",  roll,  30, 45);
+
+    // Heading compass — needle uses CSS transform (no textContent change = no blink)
+    const hdg = d.heading_deg != null ? d.heading_deg : 0;
+    setNum("n-hdg",     hdg.toFixed(1));
+    setTxt("n-hdg-dir", hdgDir(hdg));
+    const needleTransform = `translateX(-50%) translateY(-100%) rotate(${hdg}deg)`;
+    if (E["hdg-needle"].style.transform !== needleTransform)
+      E["hdg-needle"].style.transform = needleTransform;
+
+    // Attitude bars (width/background change — no textContent)
+    const pitchW = attW(pitch, 30).toFixed(1) + "%";
+    const rollW  = attW(roll,  60).toFixed(1) + "%";
+    const pitchC = attC(pitch, 15, 25);
+    const rollC  = attC(roll,  30, 45);
+    if (E["att-pitch-bar"].style.width      !== pitchW) E["att-pitch-bar"].style.width      = pitchW;
+    if (E["att-pitch-bar"].style.background !== pitchC) E["att-pitch-bar"].style.background = pitchC;
+    if (E["att-roll-bar"].style.width       !== rollW)  E["att-roll-bar"].style.width        = rollW;
+    if (E["att-roll-bar"].style.background  !== rollC)  E["att-roll-bar"].style.background   = rollC;
+    setNum("att-pitch-num", pitch.toFixed(0) + "°");
+    setNum("att-roll-num",  roll.toFixed(0)  + "°");
+
+    // Engine
+    const n1 = d.n1, n2 = d.n2, epr = d.epr;
+    setNum("n-n1",  n1  != null ? n1.toFixed(1)  : "—");
+    setNum("n-n2",  n2  != null ? n2.toFixed(1)  : "—");
+    setNum("n-epr", epr != null ? epr.toFixed(3) : "—");
+    if (n1 != null) {
+      ciWarn("ci-n1", n1, 92, 97);
+      setStyle("n-n1", "color", n1 >= 97 ? "var(--red)" : n1 >= 92 ? "var(--yellow)" : "var(--green)");
+    }
+    if (n2 != null) {
+      ciWarn("ci-n2", n2, 92, 97);
+      setStyle("n-n2", "color", n2 >= 97 ? "var(--red)" : n2 >= 92 ? "var(--yellow)" : "var(--green)");
+    }
+
+    // Accelerations
+    setNum("n-ax",    d.accel_ax != null ? (Math.round(d.accel_ax*2)/2).toFixed(1) : "—");
+    setNum("n-az",    d.accel_az != null ? (Math.round(d.accel_az*2)/2).toFixed(1) : "—");
+    setNum("n-prate", d.pitch_q  != null ? d.pitch_q.toFixed(2)  : "—");
+
+    // ── FCS telemetry (sidebar) ───────────────────────────────────────────
+    setNum("t-rs", d.raw_stick.toFixed(2));
+    setNum("t-ss", d.safe_stick.toFixed(2));
+    setNum("t-rt", d.raw_throttle.toFixed(2));
+    setNum("t-st", d.safe_throttle.toFixed(2));
+    setNum("t-pq", d.pitch_q.toFixed(2));
+    setTxt("t-fg", d.fg_connected ? "OK" : "⚠ No FG");
+    if (d.fg_write) {
+      const wr = d.fg_write, el = E["t-fgwrite"];
+      const wTxt = wr.active ? "ACTIVE" : wr.count > 0 ? "⏸ IDLE" : "— NO FAULT";
+      const wCol = wr.active ? "var(--green)" : wr.count > 0 ? "var(--yellow)" : "var(--muted)";
+      if (el.textContent !== wTxt) el.textContent = wTxt;
+      if (el.style.color !== wCol) el.style.color = wCol;
+      setNum("t-fgcount", String(wr.count || 0));
+    }
+
+    // ── Guard card ────────────────────────────────────────────────────────
+    const healthy = d.guard_status === "HEALTHY";
+    setClass("guard-card",   healthy ? "guard-card" : "guard-card failed");
+    setClass("guard-val",    healthy ? "guard-val"  : "guard-val failed");
+    setTxt("guard-val",      healthy ? "HEALTHY" : "FAILED");
+    setTxt("guard-reason",   healthy ? (d.fault_active ? "Guard monitoring active" : "All signals nominal") : d.guard_reason);
+
+    syncBtns("stick",    d.stick_fault);
+    syncBtns("throttle", d.throttle_fault);
+
+    // ── AI panel ──────────────────────────────────────────────────────────
+    if (d.ai) {
+      const risk      = (d.ai.risk || "LOW").toUpperCase();
+      const fType     = d.ai.fault_type || "NONE";
+      const isUnknown = fType === "UNKNOWN_ANOMALY";
+      const guardFail = d.guard_status !== "HEALTHY";
+      const predicted = !guardFail && fType !== "NONE" && fType !== "UNKNOWN_ANOMALY";
+
+      // Panel border colour
+      if (isUnknown)
+        setClass("ai-panel", "ai-panel risk-unknown");
+      else if (risk === "HIGH")
+        setClass("ai-panel", "ai-panel risk-high");
+      else if (risk === "MEDIUM")
+        setClass("ai-panel", "ai-panel risk-medium");
+      else
+        setClass("ai-panel", "ai-panel");
+
+      // Risk badge
+      if (isUnknown) {
+        setClass("ai-badge", "ai-badge unknown");
+        setTxt("ai-badge", "UNKNOWN");
+      } else {
+        setClass("ai-badge", "ai-badge" + (risk === "HIGH" ? " high" : risk === "MEDIUM" ? " medium" : ""));
+        setTxt("ai-badge", risk + " RISK");
+      }
+
+      // Fault label line — for unknown, leave blank (ai-unknown section handles it)
+      if (isUnknown)
+        setTxt("ai-fault", "");
+      else if (fType !== "NONE")
+        setTxt("ai-fault", predicted ? "🔮 Predicting: " + fType : "⚠ Confirmed: " + fType);
+      else
+        setTxt("ai-fault", "");
+
+      // Main prediction text — hidden when unknown (detail shown below instead)
+      const pred = d.ai.prediction || "Monitoring...";
+      if (isUnknown) {
+        if (E["ai-text"].innerHTML !== "") E["ai-text"].innerHTML = "";
+      } else {
+        if (E["ai-text"].innerHTML !== pred) E["ai-text"].innerHTML = pred;
+      }
+
+      // Unknown anomaly extra panel — shows full detail
+      const unknownEl  = document.getElementById("ai-unknown");
+      const unknownDesc= document.getElementById("ai-unknown-desc");
+      if (unknownEl) {
+        if (isUnknown) {
+          unknownEl.style.display = "block";
+          // Extract just the signal stats part for the desc (after the dash)
+          const parts = (d.ai.prediction || "").split(" — ");
+          if (unknownDesc) unknownDesc.textContent = parts.length > 1 ? parts.slice(1).join(" — ") : (d.ai.prediction || "");
+        } else {
+          unknownEl.style.display = "none";
+        }
+      }
+
+      // Prediction timing indicator
+      const timingEl = document.getElementById("ai-timing");
+      if (timingEl) {
+        if (predicted && risk === "HIGH") {
+          timingEl.style.display = "block";
+          timingEl.innerHTML = "🔮 Predicted <span>BEFORE</span> guard confirmation — dynamic rule detection active";
+        } else if (guardFail && fType !== "NONE") {
+          timingEl.style.display = "block";
+          timingEl.innerHTML = "✓ Guard confirmed — AI predicted <span>earlier</span> from signal statistics";
+        } else {
+          timingEl.style.display = "none";
+        }
+      }
+    }
+
+    // ── Steady alert highlights ──────────────────────────────────────────────
+    // Applied to components based on fault/prediction state.
+    // No animation — solid color borders/backgrounds like real ECAM displays.
+    {
+      const risk       = d.ai ? (d.ai.risk || "LOW").toUpperCase() : "LOW";
+      const faultType  = d.ai ? (d.ai.fault_type || "NONE") : "NONE";
+      const guardFail  = d.guard_status !== "HEALTHY";
+      const stickFault = d.stick_fault   !== "NONE";
+      const throtFault = d.throttle_fault !== "NONE";
+      const anyFault   = guardFail || stickFault || throtFault || d.fault_active;
+      const predicting = !anyFault && risk !== "LOW" && faultType !== "NONE";
+      const stickRelated   = ["HARD_OVER","LOSS_OF_SIGNAL","STUCK_AT"].includes(faultType);
+      const throttleRelated= ["BIAS_DRIFT","GAIN_FAILURE"].includes(faultType);
+
+      // Guard card — add prediction warning state before guard trips
+      if (!guardFail) {
+        if (risk === "HIGH" && predicting)
+          setClass("guard-card", "guard-card predicting-high");
+        else if (risk === "MEDIUM" && predicting)
+          setClass("guard-card", "guard-card predicting-medium");
+        else
+          setClass("guard-card", "guard-card");
+      }
+
+      // Chart cards — highlight by channel relevance
+      const stickActive  = stickFault  || (predicting && stickRelated);
+      const throtActive  = throtFault  || (predicting && throttleRelated);
+      const stickCard    = E["chart-stick"];
+      const throtCard    = E["chart-throttle"];
+      if (stickCard) {
+        if      (stickFault)                  setClass("chart-stick",    "chart-card fault-active");
+        else if (predicting && stickRelated)  setClass("chart-stick",    "chart-card fault-predicted");
+        else                                  setClass("chart-stick",    "chart-card");
+      }
+      if (throtCard) {
+        if      (throtFault)                  setClass("chart-throttle", "chart-card fault-active");
+        else if (predicting && throttleRelated) setClass("chart-throttle","chart-card fault-predicted");
+        else                                  setClass("chart-throttle", "chart-card");
+      }
+
+      // Telemetry items — raw/safe signal boxes
+      setClass("titem-rs", stickFault  ? "titem fault-raw"  : predicting && stickRelated   ? "titem predicting" : "titem");
+      setClass("titem-ss", stickFault  ? "titem fault-safe" : "titem");
+      setClass("titem-rt", throtFault  ? "titem fault-raw"  : predicting && throttleRelated ? "titem predicting" : "titem");
+      setClass("titem-st", throtFault  ? "titem fault-safe" : "titem");
+
+      // FG write indicator
+      if (d.fg_write && d.fg_write.active) setClass("titem-fgwrite", "titem write-active");
+      else setClass("titem-fgwrite", "titem");
+
+      // Header PFD items — mark stick-related ones during fault
+      setClass("pfd-alt",  "pfd-item");
+      setClass("pfd-spd",  anyFault && !stickFault && !throtFault ? "pfd-item" : "pfd-item");
+    }
+
+    // ── Auto demo banner ──────────────────────────────────────────────────
+    if (d.auto_demo !== undefined) updateAutoDemo(d.auto_demo);
+
+    // ── Cascade banner ────────────────────────────────────────────────────
+    const hasCasc = !!d.cascade_scenario;
+    const cascCls = hasCasc ? "show" : "";
+    setClass("cascade-banner", cascCls);
+    if (hasCasc) {
+      const titles = { throttle_runaway:"THROTTLE → STICK CASCADE", control_failure:"STICK → THROTTLE CASCADE", sensor_degradation:"SENSOR DEGRADATION CASCADE" };
+      setTxt("banner-title", titles[d.cascade_scenario] || "CASCADE ACTIVE");
+      setTxt("banner-stage", d.cascade_label || "Initialising...");
+      const map = { throttle_runaway:"btn-tr", control_failure:"btn-cf", sensor_degradation:"btn-sd" };
+      ["btn-tr","btn-cf","btn-sd"].forEach(id => setClass(id, "fbtn" + (id === map[d.cascade_scenario] ? " on-cascade" : "")));
+    } else {
+      ["btn-tr","btn-cf","btn-sd"].forEach(id => { if (E[id] && E[id].classList.contains("on-cascade")) setClass(id, "fbtn"); });
+    }
+  }
+  requestAnimationFrame(drawLoop);
+}
+requestAnimationFrame(drawLoop);
+
+function setFault(type, fault) {
+  socket.emit(type === "stick" ? "set_stick_fault" : "set_throttle_fault", { fault });
+  syncBtns(type, fault);
+}
+function syncBtns(type, active) {
+  document.querySelectorAll(`.fbtn[data-type="${type}"]`).forEach(b => {
+    const cls = "fbtn" + (b.dataset.fault === active ? (active === "NONE" ? " on-none" : " on-fault") : "");
+    if (b.className !== cls) b.className = cls;
+  });
+}
+function startCascade(name) { socket.emit("start_cascading", { scenario: name }); }
+function resetAll() {
+  socket.emit("reset_all");
+  setClass("cascade-banner",   "");
+  setClass("auto-demo-banner", "");
+  ["btn-tr","btn-cf","btn-sd"].forEach(id => setClass(id, "fbtn"));
+  syncBtns("stick",    "NONE");
+  syncBtns("throttle", "NONE");
+  setClass("guard-card",  "guard-card");
+  setClass("guard-val",   "guard-val");
+  setTxt("guard-val",     "HEALTHY");
+  setTxt("guard-reason",  "All signals nominal");
+  // Reset auto demo button
+  const btn = document.getElementById("auto-demo-btn");
+  if (btn) { btn.textContent = "▶ Start Auto Demo"; btn.className = "auto-demo-btn"; }
+}
+
+let _demoPhaseDuration = 1;
+let _demoPhaseStart    = 0;
+
+function toggleAutoDemo() {
+  const btn = document.getElementById("auto-demo-btn");
+  if (btn && btn.classList.contains("running")) {
+    stopAutoDemo();
+  } else {
+    startAutoDemo();
+  }
+}
+
+function startAutoDemo() {
+  socket.emit("start_auto_demo");
+  const btn = document.getElementById("auto-demo-btn");
+  if (btn) { btn.textContent = "⛔ Stop Auto Demo"; btn.className = "auto-demo-btn running"; }
+}
+
+function stopAutoDemo() {
+  socket.emit("stop_auto_demo");
+  setClass("auto-demo-banner", "");
+  const btn = document.getElementById("auto-demo-btn");
+  if (btn) { btn.textContent = "▶ Start Auto Demo"; btn.className = "auto-demo-btn"; }
+}
+
+function updateAutoDemo(demo) {
+  if (!demo || !demo.active) {
+    setClass("auto-demo-banner", "");
+    const btn = document.getElementById("auto-demo-btn");
+    if (btn && btn.classList.contains("running")) {
+      btn.textContent = "▶ Start Auto Demo";
+      btn.className   = "auto-demo-btn";
+    }
+    return;
+  }
+
+  // Show banner
+  document.getElementById("auto-demo-banner").className = "show";
+
+  // Step indicator
+  setTxt("demo-step",  `Step ${demo.step} / ${demo.total_steps}`);
+  setTxt("demo-fault", demo.fault_name || "—");
+  setTxt("demo-desc",  demo.description || "—");
+
+  // Phase badge
+  const badge = document.getElementById("demo-phase-badge");
+  if (badge) {
+    badge.textContent = demo.phase === "injecting" ? "INJECTING" : "RECOVERING";
+    badge.className   = "demo-phase-badge " + (demo.phase === "injecting" ? "injecting" : "resetting");
+  }
+
+  // Countdown
+  setTxt("demo-countdown", demo.countdown + "s");
+
+  // Progress bar — shows countdown within current phase
+  const bar = document.getElementById("demo-progress-bar");
+  if (bar) {
+    const maxTime = demo.phase === "injecting" ? 14 : 8;
+    const pct     = Math.min(100, (demo.countdown / maxTime) * 100);
+    bar.style.width = pct.toFixed(0) + "%";
+    bar.style.background = demo.phase === "injecting" ? "var(--red)" : "var(--green)";
+  }
+
+  // Keep start button showing "stop" while demo is running
+  const btn = document.getElementById("auto-demo-btn");
+  if (btn && !btn.classList.contains("running")) {
+    btn.textContent = "⛔ Stop Auto Demo";
+    btn.className   = "auto-demo-btn running";
+  }
+}
+</script>
+</body>
+</html>
