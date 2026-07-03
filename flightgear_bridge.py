@@ -1,5 +1,3 @@
-
-
 import socket
 import time
 import logging
@@ -25,7 +23,7 @@ class FlightGearBridge:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.host, self.port))
             self.sock.settimeout(0.5)
-            # Read banner
+            
             try:
                 self.sock.recv(4096)
             except:
@@ -47,7 +45,7 @@ class FlightGearBridge:
                 self.sock.sendall(cmd.encode('ascii'))
                 
                 response = self.sock.recv(1024).decode('ascii').strip()
-                # Parse response like: "/controls/flight/elevator = '0.5' (double)"
+                
                 if '=' in response:
                     value_str = response.split('=')[1].strip().split("'")[1]
                     return float(value_str)
@@ -78,11 +76,11 @@ class FlightGearBridge:
     def read_state(self):
        
         return {
-            # Raw pilot inputs (what pilot commands)
+            
             "raw_stick": self.get_property("/controls/flight/elevator"),
             "raw_throttle": self.get_property("/controls/engines/engine[0]/throttle"),
             
-            # FDM state for guard logic
+           
             "pitch_rate_q": self.get_property("/fdm/jsbsim/velocities/q-rad_sec"),
             "accel_ax": self.get_property("/fdm/jsbsim/accelerations/udot-ft_sec2"),
             "altitude_ft": self.get_property("/position/altitude-ft"),
@@ -91,7 +89,7 @@ class FlightGearBridge:
     
     def write_safe_commands(self, safe_stick, safe_throttle):
        
-        # Write to FCS command properties (these drive the actual controls)
+        
         self.set_property("/fdm/jsbsim/fcs/elevator-cmd-norm", safe_stick)
         self.set_property("/fdm/jsbsim/fcs/throttle-cmd-norm[0]", safe_throttle)
         self.set_property("/fdm/jsbsim/fcs/throttle-cmd-norm[1]", safe_throttle)
