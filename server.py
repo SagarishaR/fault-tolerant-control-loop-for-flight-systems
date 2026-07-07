@@ -102,8 +102,6 @@ def create_app():
             cascading_manager.stop()
         log.info("Full reset")
 
-    # ── Auto Demo events ──────────────────────────────────────────────────────
-
     @socketio.on("start_auto_demo")
     def on_start_auto_demo():
         if auto_demo_manager:
