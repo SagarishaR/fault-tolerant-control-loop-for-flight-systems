@@ -1,19 +1,5 @@
 <?xml version="1.0"?>
-<!--
-fcs_input.xml
-=============
-FlightGear Generic Protocol — UDP INPUT from Python FCS portal.
 
-Launch FlightGear with:
-  --generic=socket,in,50,127.0.0.1,5500,udp,fcs_input
-
-This tells FlightGear to listen on UDP port 5500 at 50 Hz.
-Python's UDPSender sends: "elevator,throttle\n" (CSV text).
-
-Fields (in packet order):
-  1. fcs/elevator-cmd-norm   [-1.0 … +1.0]
-  2. fcs/throttle-cmd-norm[0] [ 0.0 … +1.0]
--->
 <?xml version="1.0"?>
 <PropertyList>
   <generic>
