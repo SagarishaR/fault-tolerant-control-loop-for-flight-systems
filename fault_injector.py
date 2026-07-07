@@ -96,8 +96,6 @@ class FaultInjector:
 
         return value  
 
-   
-
     def reset(self):
         
         self.stick_fault    = StickFault.NONE
