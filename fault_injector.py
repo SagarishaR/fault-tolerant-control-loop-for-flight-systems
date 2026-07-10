@@ -13,7 +13,6 @@ class ThrottleFault:
 
 class FaultInjector:
 
-
     def __init__(
         self,
         stick_fault: str    = StickFault.NONE,
