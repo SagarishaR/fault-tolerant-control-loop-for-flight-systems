@@ -26,6 +26,12 @@ class FlightGearBridge:
         self.write_count           = 0
 
         self._connect()
+    def get_status(self):
+    return {
+        "connected": self.connected,
+        "write_count": self.write_count,
+        "last_write_time": self.last_write_time,
+    }    
 
     def _connect(self):
         try:
