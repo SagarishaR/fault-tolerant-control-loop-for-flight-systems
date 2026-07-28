@@ -101,20 +101,16 @@ class FlightGearBridge:
 
     def read_state(self):
         vals = self._batch_get([
-            # ── FCS signals (existing) ────────────────────────────────────────
+            
             "/controls/flight/elevator",
             "/controls/engines/engine[0]/throttle",
-            # ── Navigation / Position ─────────────────────────────────────────
             "/position/altitude-ft",
             "/velocities/airspeed-kt",
             "/velocities/vertical-speed-fps",
             "/orientation/heading-deg",
-            # ── Attitude ──────────────────────────────────────────────────────
             "/orientation/pitch-deg",
             "/orientation/roll-deg",
-            # ── Angular rates (real, replaces fake derivation) ────────────────
             "/velocities/pitchrate-degps",
-            # ── Engine (engine 0) ─────────────────────────────────────────────
             "/engines/engine[0]/n1",
             "/engines/engine[0]/n2",
         ])
@@ -125,7 +121,6 @@ class FlightGearBridge:
          raw_pitchrate,
          raw_n1, raw_n2) = vals
 
-        # ── Spike filter (unchanged) ──────────────────────────────────────────
         if abs(raw_stick_read - self._prev_stick) > self._SPIKE_LIMIT_STICK:
             raw_stick = self._prev_stick
         else:
@@ -138,7 +133,6 @@ class FlightGearBridge:
             raw_throttle = raw_throttle_read
             self._prev_throttle = raw_throttle
 
-        # ── Sanity gates ──────────────────────────────────────────────────────
         altitude_ft  = raw_alt      if raw_alt > 500.0    else None
         airspeed_kts = raw_airspeed if raw_airspeed > 1.0 else None
         vspeed_fpm   = raw_vspeed * 60.0      # fps → fpm
@@ -148,17 +142,15 @@ class FlightGearBridge:
         pitch_rate_q = raw_pitchrate          # real deg/s from FG
         engine_n1    = max(0.0, raw_n1)
         engine_n2    = max(0.0, raw_n2)
-        accel_ax     = (raw_throttle - 0.3) * 10.0  # keep derived for sensor_guard
+        accel_ax     = (raw_throttle - 0.3) * 10.0  
 
         return {
-            # ── Existing keys (sensor_guard / main.py depend on these) ────────
             "raw_stick":    raw_stick,
             "raw_throttle": raw_throttle,
             "pitch_rate_q": round(pitch_rate_q, 4),
             "accel_ax":     round(accel_ax,     4),
             "altitude_ft":  round(altitude_ft, 1)  if altitude_ft  is not None else None,
             "airspeed_kts": round(airspeed_kts, 1) if airspeed_kts is not None else None,
-            # ── New cockpit instrument keys ───────────────────────────────────
             "vspeed_fpm":   round(vspeed_fpm,  0),
             "heading_deg":  round(heading_deg, 1),
             "pitch_deg":    round(pitch_deg,   2),
